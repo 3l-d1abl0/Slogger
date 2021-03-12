@@ -35,7 +35,7 @@ $ virtualenv -p python3 <your_env>
 ```
 $ cd Slogger
 $ source <your_env>/bin/activate
-$ pip install requirements.txt
+$ pip install -r requirements.txt
 ```
 #### Run the Script
 ```
