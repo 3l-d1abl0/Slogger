@@ -164,5 +164,9 @@ if __name__ == '__main__':
     ap.add_argument("-u", "--urls", required=True, help=" File containing urls list")
     args = vars(ap.parse_args())
 
+    if args["urls"]== "":
+        print("Please enter a valid path to urls file")
+        exit(1)
+        
     slogg = Slogger(args["urls"])
     slogg.go()

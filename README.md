@@ -41,6 +41,8 @@ $ pip install -r requirements.txt
 ```
 $ python3 slogger.py --urls= "urls_file"
 
+You files will be downloaded to output/ folder!
+
 ```
 ## Use case
 It basically downloads the list of urls in files. Can be used as a mass downloader to download the entire urls i the file. Migrating it from my original [Repo](https://github.com/3l-d1abl0/Utilities/tree/master/Slogger) for individual tracking.
