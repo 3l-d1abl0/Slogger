@@ -23,6 +23,9 @@
 
 ## 🚀&nbsp; Installation
 
+### Watch a short video for a Walkthough
+[Youtube](https://youtu.be/taEARhtL3IA)
+
 #### Clone the repo
 ```
 $ git clone https://github.com/3l-d1abl0/Slogger.git
