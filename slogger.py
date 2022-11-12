@@ -26,7 +26,7 @@ class Slogger:
 
         #read the file and setup the urls
         self.urls = [url.strip() for url in open(url_file).readlines()]
-        self.new_urls = self.url_encode(self.urls)
+        self.new_urls = self.urls #self.url_encode(self.urls)
         self.url_size = {}
         '''
         for url in self.new_urls:
@@ -36,7 +36,29 @@ class Slogger:
 
     def fetch_size(self, idx, url):
 
-        site = urllib.request.urlopen(url)
+        '''
+        headers={ "Accept-Language": "en_US", "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/39.0.2171.95 Safari/537.36"}
+        '''
+        try:
+            req = urllib.request.Request(url)
+            req.add_header("Accept-Language", "en-US,en;q=0.9,hi;q=0.8")
+            req.add_header("Connection","keep-alive")
+            #req.add_header("Host","cdn9.git.ir")
+            req.add_header("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/39.0.2171.95 Safari/537.36")
+            site = urllib.request.urlopen(req)
+            print(site)
+        except Exception as e:
+            print(e)
+            '''
+            print("Oops!", dir(e), "occurred.")
+            print(e.reason)
+            print(e.info)
+            print(e.msg)
+            print(e.name)
+            print(e.strerror)
+            print(e.status)'''
+            return 0
+
         meta = site.info()
 
         self.url_size[idx] = [url.split("/")[-1], 0, int(meta['Content-Length'])]
@@ -61,7 +83,7 @@ class Slogger:
             return "{:.2f} KB".format(size_bytes/(1024))
 
         else:
-            print("Total Size : {} B ({} bytes)".format(size_bytes))
+            print("Total Size : {} B ({} bytes)".format(size_bytes, size_bytes))
             return "{} B".format(size_bytes)
 
 
@@ -71,6 +93,7 @@ class Slogger:
 
             futures = []
             for idx, url in enumerate(self.new_urls):
+                #print(idx, 'URL : ',url)
                 futures.append(executor.submit(self.fetch_size, idx, url))
 
             cumulative =0
@@ -84,7 +107,10 @@ class Slogger:
         ''' Save the urls to the disk'''
 
         req = urllib.request.urlopen(url)
+        print(os.path.basename(url))
         filename = urllib.parse.unquote(os.path.basename(url))
+        filename = filename.replace("/","-")
+        filename = filename.replace("?","-")
 
         #print("Thread : {}".format(threading.current_thread().name))
         print("{}STARTED{} : {thread} => {filename}\n".format(Fore.RED, Style.RESET_ALL, thread=threading.current_thread().name ,filename=filename))
