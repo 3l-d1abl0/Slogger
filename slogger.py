@@ -25,7 +25,7 @@ class Slogger:
     def __init__(self, url_file):
 
         #read the file and setup the urls
-        self.urls = [url.strip() for url in open(url_file).readlines()]
+        self.urls = [url.strip().replace(" ","%20") for url in open(url_file).readlines()]
         self.new_urls = self.urls #self.url_encode(self.urls)
         self.url_size = {}
         '''
