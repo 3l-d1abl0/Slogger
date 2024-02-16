@@ -31,34 +31,46 @@ async def cal_total_size(urls, url_info):
     
 async def slogger(sema, session, idx, url, url_info, output_dir, Q):
 
-    async with sema:
-        async with session.get(url) as response:
-            if response.status == 200:
-                file_name = os.path.basename(url)
-                with open(os.path.join(output_dir, url_info[idx][0]), 'wb') as file:
-                    while True:
-                        chunk = await response.content.read(1024)
-                        if not chunk:
-                            break
-                        file.write(chunk)
-                        await Q["speed_queue"].put(sys.getsizeof(chunk))
+    try:
 
-                await Q["done_queue"].put(('DONE', idx))
-    
+        async with sema:
+            async with session.get(url) as response:
+                if response.status == 200:
+                    file_name = os.path.basename(url)
+                    with open(os.path.join(output_dir, url_info[idx][0]), 'wb') as file:
+                        while True:
+
+                            if Q["quit_event"].is_set():
+                                break
+                            
+                            chunk = await response.content.read(1024)
+                            if not chunk:
+                                break
+                            file.write(chunk)
+                            await Q["speed_queue"].put(sys.getsizeof(chunk))
+
+                    await Q["done_queue"].put(('DONE', idx))
+    except Exception as e:
+        print(f"Error during download: {e}")
+        return
 
 async def reciever(Q, url_info):
 
-    ctr = 0
+    timeout = 300  #5Minutes
+    start_time = time.time()
+    speed_checkpoint_time = time.time()
+
     total_bytes = 0
     current_bytes =0
-    last_time = time.time()
-    to_fetch = len(url_info)
+    
     fetched =0
+    to_fetch = len(url_info)
+    
 
     while True:
 
         #Get speed queue
-        last_checkpoint_time =  time.time()
+        read_checkpoint_time =  time.time()
         while True:
             try:
                 bytes = await asyncio.wait_for(Q["speed_queue"].get(), timeout=0.1)
@@ -68,7 +80,7 @@ async def reciever(Q, url_info):
                 else:
                     break
                 current_checkpoint_time = time.time()
-                if current_checkpoint_time-last_time >= 0.5:
+                if current_checkpoint_time-read_checkpoint_time >= 0.5:
                     break
 
             except asyncio.TimeoutError:
@@ -99,32 +111,35 @@ async def reciever(Q, url_info):
             #print("timeout error on Error Queue")
             pass
 
+
+        bar_length = 50
+        filled_len = int((bar_length/to_fetch)*fetched)
+        bar = '█'*filled_len + '-'*(bar_length-filled_len)
+        percent = (fetched/to_fetch)*100
+        speed = (2*current_bytes)/(1024*1024)
+        sys.stdout.write(f"\r\033[KProgress |{bar}| {fetched}/{to_fetch} {percent:.2f}% @{speed:.2f} MB/s")
+        sys.stdout.flush()
+
+
+        #Speed per sec
         current_time = time.time()
-        if current_time - last_time > 1:
-            last_time = current_time
-
-
-            bar_length = 50
-            filled_len = int((bar_length/to_fetch)*fetched)
-            bar = '█'*filled_len + '-'*(bar_length-filled_len)
-            percent = (fetched/to_fetch)*100
-            speed = (2*current_bytes)/(1024*1024)
-            sys.stdout.write(f"\r\033[KProgress |{bar}| {fetched}/{to_fetch} {percent:.2f}% @{speed:.2f} MB/s")
-            sys.stdout.flush()
-
-
-
-            #print(f"=========== BAR {ctr} {fetched}/{to_fetch} @{(2*current_bytes)/(1024*1024)}")
+        if current_time - speed_checkpoint_time > 1:
+            speed_checkpoint_time = current_time
             current_bytes = 0
-
+            
+        #If all task Completed
         if fetched == to_fetch:
             print(f"Fetched {total_bytes/(1024*1024)}")
             return True
-
-        if ctr == 500:
+        
+        if time.time() - start_time >= timeout:
+            Q["quit_event"].set()
+            sys.stdout.write(f"\r\033[KHitting TimeOut! \n")
+            sys.stdout.flush()
             return
         
-        ctr+=1
+    print("Out of Loop!")
+    return
 
 
 async def get_urls(output_dir, urls, url_info):
@@ -135,7 +150,7 @@ async def get_urls(output_dir, urls, url_info):
     Q = { "speed_queue" :asyncio.Queue(),
           "done_queue" : asyncio.Queue(),
           "error_queue" : asyncio.Queue(),
-          "quit_queue" : asyncio.Queue()
+          "quit_event" : asyncio.Event()
     }
 
 
@@ -145,7 +160,6 @@ async def get_urls(output_dir, urls, url_info):
 
         status_task = reciever(Q, url_info)
         await asyncio.gather(*download_tasks, status_task)
-
 
     print("DONE")
     print("EXITING")
