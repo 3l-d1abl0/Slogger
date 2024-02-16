@@ -4,6 +4,14 @@ import sys
 import time
 import argparse
 import threading
+
+from datetime import datetime
+import click
+import asyncio
+import aiohttp
+
+
+from goasync import coroutines
 import urllib.request
 from colorama import Fore, Back, Style
 from concurrent.futures import as_completed
@@ -157,6 +165,21 @@ class Slogger:
 
     def go(self):
 
+        start = datetime.now()
+        total_size_bytes = asyncio.run(coroutines.cal_total_size(self.urls, self.url_size))
+        click.secho(f"{datetime.now()-start}", bold=True, bg="blue", fg="white")
+
+        total_size = self.print_relative_size(sum(total_size_bytes))
+        for idx, ele in self.url_size.items():
+            print("[{}INFO{}] {} -> {}{:.2f}MB{}".format(Fore.GREEN, Style.RESET_ALL, ele[0], Fore.GREEN, ele[2]/(1024*1024), Style.RESET_ALL))
+
+        option =''
+        while option not in ('Y', 'N'):
+            option = input("\n"+Fore.RED+total_size+Style.RESET_ALL+" of Data required. Do you want to continue ? "+Back.RED+"[Y/N]"+Style.RESET_ALL+" : ")
+
+            if option not in ('Y', 'N'):
+                print("Incorrect option! Choose 'Y' or 'N'")
+        return 
         #Check for the entire size of downloads and check with user
         total_size_bytes = self.cal_total_size()
         total_size = self.print_relative_size(total_size_bytes)
