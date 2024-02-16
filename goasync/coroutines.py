@@ -1,3 +1,4 @@
+from colorama import Fore, Style
 import asyncio
 import aiohttp
 import time
@@ -29,6 +30,33 @@ async def cal_total_size(urls, url_info):
         
         return size_data
     
+def flush_to_terminal(message_queue):
+
+    while message_queue:
+        message = message_queue.pop(0)
+
+        #Error Message
+        if message[0] == 1:
+            status = "[{}ERROR{}]".format(Fore.RED, Style.RESET_ALL)
+            sys.stdout.write(f"\r\033[K{status} {message[2]} :: {message[1]}\n")
+            sys.stdout.flush()
+        #Done
+        elif message[0] == 2:
+            status = "[{}DONE{}]".format(Fore.GREEN, Style.RESET_ALL)
+            sys.stdout.write(f"\r\033[K{status} {message[1]}\n")
+            sys.stdout.flush()
+        #Timeout
+        elif message[0] == 3:
+            status = "{}{}{}".format(Fore.RED, message[1], Style.RESET_ALL)
+            sys.stdout.write(f"\n{status}\n")
+            sys.stdout.flush()
+        else:
+            status = "[{}INFO{}]".format(Fore.CYAN, Style.RESET_ALL)
+            sys.stdout.write(f"\r\033[K{status}: {message}\n")
+            sys.stdout.flush()
+
+
+
 async def slogger(sema, session, idx, url, url_info, output_dir, Q):
 
     try:
@@ -42,16 +70,18 @@ async def slogger(sema, session, idx, url, url_info, output_dir, Q):
 
                             if Q["quit_event"].is_set():
                                 break
-                            
+
                             chunk = await response.content.read(1024)
                             if not chunk:
                                 break
                             file.write(chunk)
                             await Q["speed_queue"].put(sys.getsizeof(chunk))
+                            url_info[idx][1] += sys.getsizeof(chunk)
 
                     await Q["done_queue"].put(('DONE', idx))
     except Exception as e:
-        print(f"Error during download: {e}")
+        #print(f"Error during download: {e}")
+        await Q["error_queue"].put((e, idx))
         return
 
 async def reciever(Q, url_info):
@@ -66,6 +96,7 @@ async def reciever(Q, url_info):
     fetched =0
     to_fetch = len(url_info)
     
+    message_queue =[]
 
     while True:
 
@@ -84,8 +115,7 @@ async def reciever(Q, url_info):
                     break
 
             except asyncio.TimeoutError:
-                #Exception while reading Speed QUeue
-                #print("Timeout Error !")
+                #Exception while reading Speed Queue
                 break
 
 
@@ -93,9 +123,8 @@ async def reciever(Q, url_info):
         try:
             msg = await asyncio.wait_for(Q["done_queue"].get(), timeout=0.1)
             if msg is not None:
-                sys.stdout.write(f"\r\033[K[DONE] {url_info[msg[1]][0]}\n")
-                sys.stdout.flush()
                 fetched+=1
+                message_queue.append((2,url_info[msg[1]][0]))
         except asyncio.TimeoutError:
             #print("timeout error on Error Queue")
             pass
@@ -105,12 +134,13 @@ async def reciever(Q, url_info):
         try:
             msg = await asyncio.wait_for(Q["error_queue"].get(), timeout=0.1)
             if msg is not None:
-                sys.stdout.write(f"\r\033[K[ERROR] {url_info[msg[1]][0]}\n")
-                sys.stdout.flush()
+                message_queue.append((1,url_info[msg[1]][0], msg[0]))
         except asyncio.TimeoutError:
             #print("timeout error on Error Queue")
             pass
 
+
+        flush_to_terminal(message_queue)
 
         bar_length = 50
         filled_len = int((bar_length/to_fetch)*fetched)
@@ -129,22 +159,20 @@ async def reciever(Q, url_info):
             
         #If all task Completed
         if fetched == to_fetch:
-            print(f"Fetched {total_bytes/(1024*1024)}")
             return True
         
         if time.time() - start_time >= timeout:
             Q["quit_event"].set()
-            sys.stdout.write(f"\r\033[KHitting TimeOut! \n")
-            sys.stdout.flush()
+            flush_to_terminal([(3, f"Reached Timeout of {timeout} seconds")])
             return
         
-    print("Out of Loop!")
+    #Unreachable
     return
 
 
 async def get_urls(output_dir, urls, url_info):
     
-    concurrency_limit = 5  # Set your desired concurrency limit
+    concurrency_limit = 10  # Set your desired concurrency limit
     sema = asyncio.Semaphore(concurrency_limit)
 
     Q = { "speed_queue" :asyncio.Queue(),
@@ -160,6 +188,4 @@ async def get_urls(output_dir, urls, url_info):
 
         status_task = reciever(Q, url_info)
         await asyncio.gather(*download_tasks, status_task)
-
-    print("DONE")
-    print("EXITING")
+    print("\nEXITING")
