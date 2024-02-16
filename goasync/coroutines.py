@@ -1,6 +1,7 @@
 import asyncio
 import aiohttp
 import time
+import sys
 import os
 
 async def fetch_size(session, url, idx, url_info):
@@ -40,37 +41,90 @@ async def slogger(sema, session, idx, url, url_info, output_dir, Q):
                         if not chunk:
                             break
                         file.write(chunk)
-                        await Q["speed_queue"].put(len(chunk))
+                        await Q["speed_queue"].put(sys.getsizeof(chunk))
 
-                await Q["done_queue"].put(('Download Complete', idx))
+                await Q["done_queue"].put(('DONE', idx))
     
 
-async def reciever(Q):
+async def reciever(Q, url_info):
 
     ctr = 0
+    total_bytes = 0
+    current_bytes =0
     last_time = time.time()
-    while True:
-        done, _ = await asyncio.wait(
-            [Q[queue].get() for queue in Q],
-            timeout=0.1  # Adjust the timeout as needed
-        )
-        
-        for fut in done:
-            message = fut.result()
-            if message is None:
-                # None is used as a sentinel to signal the end
-                return
-            print(f" {ctr}: {message}")
+    to_fetch = len(url_info)
+    fetched =0
 
-        if ctr == 100:
-            return
+    while True:
+
+        #Get speed queue
+        last_checkpoint_time =  time.time()
+        while True:
+            try:
+                bytes = await asyncio.wait_for(Q["speed_queue"].get(), timeout=0.1)
+                if bytes is not None:
+                    total_bytes +=bytes
+                    current_bytes += bytes
+                else:
+                    break
+                current_checkpoint_time = time.time()
+                if current_checkpoint_time-last_time >= 0.5:
+                    break
+
+            except asyncio.TimeoutError:
+                #Exception while reading Speed QUeue
+                #print("Timeout Error !")
+                break
+
+
+        #Get Done Queue
+        try:
+            msg = await asyncio.wait_for(Q["done_queue"].get(), timeout=0.1)
+            if msg is not None:
+                sys.stdout.write(f"\r\033[K[DONE] {url_info[msg[1]][0]}\n")
+                sys.stdout.flush()
+                fetched+=1
+        except asyncio.TimeoutError:
+            #print("timeout error on Error Queue")
+            pass
+
         
-        ctr+=1
+        #Get Error Queue
+        try:
+            msg = await asyncio.wait_for(Q["error_queue"].get(), timeout=0.1)
+            if msg is not None:
+                sys.stdout.write(f"\r\033[K[ERROR] {url_info[msg[1]][0]}\n")
+                sys.stdout.flush()
+        except asyncio.TimeoutError:
+            #print("timeout error on Error Queue")
+            pass
 
         current_time = time.time()
         if current_time - last_time > 1:
             last_time = current_time
-        print("=========== BAR")
+
+
+            bar_length = 50
+            filled_len = int((bar_length/to_fetch)*fetched)
+            bar = '█'*filled_len + '-'*(bar_length-filled_len)
+            percent = (fetched/to_fetch)*100
+            speed = (2*current_bytes)/(1024*1024)
+            sys.stdout.write(f"\r\033[KProgress |{bar}| {fetched}/{to_fetch} {percent:.2f}% @{speed:.2f} MB/s")
+            sys.stdout.flush()
+
+
+
+            #print(f"=========== BAR {ctr} {fetched}/{to_fetch} @{(2*current_bytes)/(1024*1024)}")
+            current_bytes = 0
+
+        if fetched == to_fetch:
+            print(f"Fetched {total_bytes/(1024*1024)}")
+            return True
+
+        if ctr == 500:
+            return
+        
+        ctr+=1
 
 
 async def get_urls(output_dir, urls, url_info):
@@ -89,7 +143,7 @@ async def get_urls(output_dir, urls, url_info):
 
         download_tasks = [slogger(sema, session, idx, url, url_info, output_dir, Q) for idx, url in enumerate(urls)]
 
-        status_task = reciever(Q)
+        status_task = reciever(Q, url_info)
         await asyncio.gather(*download_tasks, status_task)
 
 
