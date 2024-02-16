@@ -6,17 +6,23 @@ import sys
 import os
 
 async def fetch_size(session, url, idx, url_info):
-    async with session.get(url) as response:
-        content_length = response.headers.get('Content-Length')
 
-        if content_length is not None:
-            size = int(content_length)
-            url_info[idx] = [url.split("/")[-1], 0, int(size)]
-            return size
-        else:
-            print(f"Could not determine the size of {url}")
-            url_info[idx] = [url.split("/")[-1], 0, 0]
-            return 0
+    try:
+    
+        async with session.get(url) as response:
+            content_length = response.headers.get('Content-Length')
+
+            if content_length is not None:
+                size = int(content_length)
+                url_info[idx] = [url.split("/")[-1], 0, int(size)]
+                return size
+            else:
+                print(f"Could not determine the size of {url}")
+                url_info[idx] = [url.split("/")[-1], 0, 0]
+                return 0
+    except Exception as e:
+        print("[{}ERROR{}] {} [{}{}{}]".format(Fore.RED, Style.RESET_ALL, url.split("/")[-1], Fore.RED, e, Style.RESET_ALL))
+        return -1
 
 
 async def cal_total_size(urls, url_info):

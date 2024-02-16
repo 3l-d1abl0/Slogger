@@ -6,9 +6,7 @@ import argparse
 import threading
 
 from datetime import datetime
-import click
 import asyncio
-import aiohttp
 
 
 from goasync import coroutines
@@ -134,19 +132,26 @@ class Slogger:
     def go(self):
 
         start = datetime.now()
-        total_size_bytes = asyncio.run(coroutines.cal_total_size(self.urls, self.url_size))
-        click.secho(f"{datetime.now()-start}", bold=True, bg="blue", fg="white")
+        
+        size_list = asyncio.run(coroutines.cal_total_size(self.urls, self.url_size))
 
-        total_size = self.print_relative_size(sum(total_size_bytes))
+        total_size_bytes = sum(size_list)
+        if(total_size_bytes <= 0):
+            print("[{}ERROR{}] {}{}{}".format(Fore.RED, Style.RESET_ALL, Fore.RED, "Unable to fetch Data !", Style.RESET_ALL))
+            return
+        
+        total_size = self.print_relative_size(total_size_bytes)
+        
         for idx, ele in self.url_size.items():
-            print("[{}INFO{}] {} -> {}{:.2f}MB{}".format(Fore.GREEN, Style.RESET_ALL, ele[0], Fore.GREEN, ele[2]/(1024*1024), Style.RESET_ALL))
+            print("[{}INFO{}] {} [{}{:.2f}MB{}]".format(Fore.GREEN, Style.RESET_ALL, ele[0], Fore.GREEN, ele[2]/(1024*1024), Style.RESET_ALL))
 
         option =''
         while option not in ('Y', 'N'):
             option = input("\n"+Fore.RED+total_size+Style.RESET_ALL+" of Data required. Do you want to continue ? "+Back.RED+"[Y/N]"+Style.RESET_ALL+" : ")
 
             if option not in ('Y', 'N'):
-                print("Incorrect option! Choose 'Y' or 'N'")
+                print("Incorrect option!")
+                print(f"You entered '{option}' You Choose 'Y' or 'N'")
 
         #Don't proceed to donload if user opts out
         if option == 'N':
@@ -159,33 +164,6 @@ class Slogger:
         
         
         self.get_urls()
-        return 
-        #Check for the entire size of downloads and check with user
-        total_size_bytes = self.cal_total_size()
-        total_size = self.print_relative_size(total_size_bytes)
-
-        for idx, ele in self.url_size.items():
-            print(" {} => {:.2f}MB : {} :: {:.2f}%".format(ele[0], ele[2]/(1024*1024), ele[1], (ele[1]/ele[2])*100))
-
-        option =''
-        while option not in ('Y', 'N'):
-            option = input("\n"+Fore.RED+total_size+Style.RESET_ALL+" of Data required. Do you want to continue ? "+Back.RED+"[Y/N]"+Style.RESET_ALL+" : ")
-
-            if option not in ('Y', 'N'):
-                print("Incorrect option! Choose 'Y' or 'N'")
-
-        #Don't proceed to donload if user opts out
-        if option == 'N':
-            print('Got it! Exiting ...')
-            exit()
-
-        print("Proceed to Download ....")
-        #Proceed ahead to download the urls
-
-        self.download_urls()
-
-        for idx, ele in self.url_size.items():
-            print(" {} => {:.2f}MB : {} :: {:.2f}%".format(ele[0], ele[2]/(1024*1024), ele[1], (ele[1]/ele[2])*100))
 
 if __name__ == '__main__':
 
