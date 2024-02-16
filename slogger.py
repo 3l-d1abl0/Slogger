@@ -42,39 +42,6 @@ class Slogger:
         #print(self.new_urls)
         '''
 
-    def fetch_size(self, idx, url):
-
-        '''
-        headers={ "Accept-Language": "en_US", "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/39.0.2171.95 Safari/537.36"}
-        '''
-        try:
-            req = urllib.request.Request(url)
-            req.add_header("Accept-Language", "en-US,en;q=0.9,hi;q=0.8")
-            req.add_header("Connection","keep-alive")
-            #req.add_header("Host","cdn9.git.ir")
-            req.add_header("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/39.0.2171.95 Safari/537.36")
-            site = urllib.request.urlopen(req)
-            print(site)
-        except Exception as e:
-            print(e)
-            '''
-            print("Oops!", dir(e), "occurred.")
-            print(e.reason)
-            print(e.info)
-            print(e.msg)
-            print(e.name)
-            print(e.strerror)
-            print(e.status)'''
-            return 0
-
-        meta = site.info()
-
-        self.url_size[idx] = [url.split("/")[-1], 0, int(meta['Content-Length'])]
-
-        #print("Thread : {}".format(threading.current_thread().name))
-        print("{} {} {}: {} --> {}{}{:.2f}MB ({} bytes){} \n".format(Fore.RED, threading.current_thread().name, Style.RESET_ALL, url.split("/")[-1], Fore.GREEN, Back.BLACK, int(meta['Content-Length'])/(1024*1024), int(meta['Content-Length']), Style.RESET_ALL))
-        return int(meta['Content-Length'])
-
     @staticmethod
     def print_relative_size(size_bytes):
 
@@ -94,21 +61,6 @@ class Slogger:
             print("Total Size : {} B ({} bytes)".format(size_bytes, size_bytes))
             return "{} B".format(size_bytes)
 
-
-    def cal_total_size(self):
-
-        with ThreadPoolExecutor(max_workers=7) as executor:
-
-            futures = []
-            for idx, url in enumerate(self.new_urls):
-                #print(idx, 'URL : ',url)
-                futures.append(executor.submit(self.fetch_size, idx, url))
-
-            cumulative =0
-            for future in as_completed(futures):
-                cumulative += future.result()
-            #print("Cumulative Size : {}\n".format(cumulative))
-            return cumulative
 
 
     def fetch_urls(self, idx, url):
@@ -163,6 +115,22 @@ class Slogger:
 
         print('======')
 
+    def get_urls(self):
+
+        #have the Output folder
+        self.base_dir = os.path.dirname(os.path.realpath(__file__))
+        self.output_dir = os.path.join(self.base_dir, "output")
+
+        if os.path.exists(self.output_dir)==False:
+            os.mkdir(self.output_dir)
+
+
+        asyncio.run(coroutines.get_urls(self.output_dir, self.new_urls, self.url_size))
+
+        print("Done ! Exiting !")
+
+
+
     def go(self):
 
         start = datetime.now()
@@ -179,6 +147,18 @@ class Slogger:
 
             if option not in ('Y', 'N'):
                 print("Incorrect option! Choose 'Y' or 'N'")
+
+        #Don't proceed to donload if user opts out
+        if option == 'N':
+            print('Got it! Exiting ...')
+            exit()
+
+        #Proceed ahead to download the urls
+        print("Proceeding to fetch Urls ... ")
+        
+        
+        
+        self.get_urls()
         return 
         #Check for the entire size of downloads and check with user
         total_size_bytes = self.cal_total_size()
