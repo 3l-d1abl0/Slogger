@@ -59,60 +59,6 @@ class Slogger:
             print("Total Size : {} B ({} bytes)".format(size_bytes, size_bytes))
             return "{} B".format(size_bytes)
 
-
-
-    def fetch_urls(self, idx, url):
-        ''' Save the urls to the disk'''
-
-        req = urllib.request.urlopen(url)
-        print(os.path.basename(url))
-        filename = urllib.parse.unquote(os.path.basename(url))
-        filename = filename.replace("/","-")
-        filename = filename.replace("?","-")
-
-        #print("Thread : {}".format(threading.current_thread().name))
-        print("{}STARTED{} : {thread} => {filename}\n".format(Fore.RED, Style.RESET_ALL, thread=threading.current_thread().name ,filename=filename))
-
-        with open(os.path.join(self.output_dir, filename), 'wb') as file_handler:
-
-            prev_time = time.time()
-            curr_size =0
-            while True:
-                chunk = req.read(1024)
-                if not chunk:
-                    break
-                #print(sys.getsizeof(chunk))
-                file_handler.write(chunk)
-                curr_size += sys.getsizeof(chunk)
-
-                with lock:
-                    self.url_size[idx][1] = curr_size
-
-                curr_time = time.time()
-                if curr_time - prev_time >= 3:
-                    print("{}{} Downloading {} {} : {} -->> {:.2f} %\n".format(Fore.RED,Back.CYAN,Style.RESET_ALL,threading.current_thread().name, filename, (curr_size/self.url_size[idx][2])*100 ))
-                    prev_time = curr_time
-
-        return "{}{} DONE {}: {thread} => {filename}\n".format(Fore.RED,Back.GREEN,Style.RESET_ALL, thread=threading.current_thread().name ,filename=filename)
-
-
-    def download_urls(self):
-
-        # Create temp and output paths based on where the executable is located
-        self.base_dir = os.path.dirname(os.path.realpath(__file__))
-        self.output_dir = os.path.join(self.base_dir, "output")
-
-        if os.path.exists(self.output_dir)==False:
-            os.mkdir(self.output_dir)
-
-        with ThreadPoolExecutor(max_workers=7) as executor:
-
-            futures = [executor.submit(self.fetch_urls, idx, url) for idx, url in enumerate(self.new_urls)]
-            for future in as_completed(futures):
-                print(future.result())
-
-        print('======')
-
     def get_urls(self):
 
         #have the Output folder
