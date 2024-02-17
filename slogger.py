@@ -106,10 +106,11 @@ class Slogger:
 
         #Proceed ahead to download the urls
         print("Proceeding to fetch Urls ... ")
-        
+        sys.stdout.flush()
         
         
         self.get_urls()
+
 
 if __name__ == '__main__':
 
