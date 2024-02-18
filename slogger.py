@@ -4,6 +4,12 @@ import sys
 import time
 import argparse
 import threading
+
+from datetime import datetime
+import asyncio
+
+
+from goasync import coroutines
 import urllib.request
 from colorama import Fore, Back, Style
 from concurrent.futures import as_completed
@@ -25,25 +31,14 @@ class Slogger:
     def __init__(self, url_file):
 
         #read the file and setup the urls
-        self.urls = [url.strip() for url in open(url_file).readlines()]
-        self.new_urls = self.url_encode(self.urls)
+        self.urls = [url.strip().replace(" ","%20") for url in open(url_file).readlines()]
+        self.new_urls = self.urls #self.url_encode(self.urls)
         self.url_size = {}
         '''
         for url in self.new_urls:
             print (url)
         #print(self.new_urls)
         '''
-
-    def fetch_size(self, idx, url):
-
-        site = urllib.request.urlopen(url)
-        meta = site.info()
-
-        self.url_size[idx] = [url.split("/")[-1], 0, int(meta['Content-Length'])]
-
-        #print("Thread : {}".format(threading.current_thread().name))
-        print("{} {} {}: {} --> {}{}{:.2f}MB ({} bytes){} \n".format(Fore.RED, threading.current_thread().name, Style.RESET_ALL, url.split("/")[-1], Fore.GREEN, Back.BLACK, int(meta['Content-Length'])/(1024*1024), int(meta['Content-Length']), Style.RESET_ALL))
-        return int(meta['Content-Length'])
 
     @staticmethod
     def print_relative_size(size_bytes):
@@ -61,30 +56,19 @@ class Slogger:
             return "{:.2f} KB".format(size_bytes/(1024))
 
         else:
-            print("Total Size : {} B ({} bytes)".format(size_bytes))
+            print("Total Size : {} B ({} bytes)".format(size_bytes, size_bytes))
             return "{} B".format(size_bytes)
 
-
-    def cal_total_size(self):
-
-        with ThreadPoolExecutor(max_workers=7) as executor:
-
-            futures = []
-            for idx, url in enumerate(self.new_urls):
-                futures.append(executor.submit(self.fetch_size, idx, url))
-
-            cumulative =0
-            for future in as_completed(futures):
-                cumulative += future.result()
-            #print("Cumulative Size : {}\n".format(cumulative))
-            return cumulative
 
 
     def fetch_urls(self, idx, url):
         ''' Save the urls to the disk'''
 
         req = urllib.request.urlopen(url)
+        print(os.path.basename(url))
         filename = urllib.parse.unquote(os.path.basename(url))
+        filename = filename.replace("/","-")
+        filename = filename.replace("?","-")
 
         #print("Thread : {}".format(threading.current_thread().name))
         print("{}STARTED{} : {thread} => {filename}\n".format(Fore.RED, Style.RESET_ALL, thread=threading.current_thread().name ,filename=filename))
@@ -129,34 +113,57 @@ class Slogger:
 
         print('======')
 
+    def get_urls(self):
+
+        #have the Output folder
+        self.base_dir = os.path.dirname(os.path.realpath(__file__))
+        self.output_dir = os.path.join(self.base_dir, "output")
+
+        if os.path.exists(self.output_dir)==False:
+            os.mkdir(self.output_dir)
+
+
+        asyncio.run(coroutines.get_urls(self.output_dir, self.new_urls, self.url_size))
+
+        print("Done ! Exiting !")
+
+
+
     def go(self):
 
-        #Check for the entire size of downloads and check with user
-        total_size_bytes = self.cal_total_size()
-        total_size = self.print_relative_size(total_size_bytes)
+        start = datetime.now()
+        
+        size_list = asyncio.run(coroutines.cal_total_size(self.urls, self.url_size))
 
+        total_size_bytes = sum(size_list)
+        if(total_size_bytes <= 0):
+            print("[{}ERROR{}] {}{}{}".format(Fore.RED, Style.RESET_ALL, Fore.RED, "Unable to fetch Data !", Style.RESET_ALL))
+            return
+        
+        total_size = self.print_relative_size(total_size_bytes)
+        
         for idx, ele in self.url_size.items():
-            print(" {} => {:.2f}MB : {} :: {:.2f}%".format(ele[0], ele[2]/(1024*1024), ele[1], (ele[1]/ele[2])*100))
+            print("[{}INFO{}] {} [{}{:.2f}MB{}]".format(Fore.GREEN, Style.RESET_ALL, ele[0], Fore.GREEN, ele[2]/(1024*1024), Style.RESET_ALL))
 
         option =''
         while option not in ('Y', 'N'):
             option = input("\n"+Fore.RED+total_size+Style.RESET_ALL+" of Data required. Do you want to continue ? "+Back.RED+"[Y/N]"+Style.RESET_ALL+" : ")
 
             if option not in ('Y', 'N'):
-                print("Incorrect option! Choose 'Y' or 'N'")
+                print("Incorrect option!")
+                print(f"You entered '{option}' You Choose 'Y' or 'N'")
 
         #Don't proceed to donload if user opts out
         if option == 'N':
             print('Got it! Exiting ...')
             exit()
 
-        print("Proceed to Download ....")
         #Proceed ahead to download the urls
-
-        self.download_urls()
-
-        for idx, ele in self.url_size.items():
-            print(" {} => {:.2f}MB : {} :: {:.2f}%".format(ele[0], ele[2]/(1024*1024), ele[1], (ele[1]/ele[2])*100))
+        print("Proceeding to fetch Urls ... ")
+        
+        
+        
+        self.get_urls()
 
 if __name__ == '__main__':
 
