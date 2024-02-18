@@ -81,8 +81,8 @@ async def slogger(sema, session, idx, url, url_info, output_dir, Q):
                             if not chunk:
                                 break
                             file.write(chunk)
-                            await Q["speed_queue"].put(sys.getsizeof(chunk))
-                            url_info[idx][1] += sys.getsizeof(chunk)
+                            await Q["speed_queue"].put(len(chunk))
+                            url_info[idx][1] += len(chunk)
 
                     await Q["done_queue"].put(('DONE', idx))
     except Exception as e:
@@ -153,7 +153,7 @@ async def reciever(Q, url_info):
         bar = '█'*filled_len + '-'*(bar_length-filled_len)
         percent = (fetched/to_fetch)*100
         speed = (2*current_bytes)/(1024*1024)
-        sys.stdout.write(f"\r\033[KProgress |{bar}| {fetched}/{to_fetch} {percent:.2f}% @{speed:.2f} MB/s")
+        sys.stdout.write(f"\r\033[KSlogging |{bar}| {fetched}/{to_fetch} {percent:.2f}% @{speed:.2f} MB/s")
         sys.stdout.flush()
 
 
